@@ -1,0 +1,14 @@
+{
+  "name": "aamb-slack-bot",
+  "description": "AAMB Trombones Slack App",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "@slack/web-api": "^5.11.0",
+    "express": "^4.17.1",
+    "body-parser": "^1.19.0",
+    "firebase-admin": "^9.0.0"
+  }
+}
