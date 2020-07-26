@@ -1,7 +1,0 @@
-runtime: nodejs10
-env_variables:
-  SLACK_SIGNING_SECRET: 86651ce5a7f70d8b250d774d25f90699
-  SLACK_TOKEN: xoxb-1255128352531-1281412812080-NWPIVF198UHcG6iYVPIMaNA3
-instance_class: F1
-automatic_scaling:
-  min_instances: 1
