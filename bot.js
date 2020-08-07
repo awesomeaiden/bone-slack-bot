@@ -135,7 +135,7 @@ let ref = db.ref("slack");
             let selectedUser = jsonreq.actions[0].selected_user;
             let userInfo = await getUserInfo(selectedUser);
             if (jsonreq.message.blocks[0].text.text === "Which user's gigs would you like to view?") {
-                if (await userGigAuthed(request.body.user_id)) {
+                if (await userGigAuthed(jsonreq.user.id)) {
                     sendUserGigs(selectedUser, userInfo.user.real_name, jsonreq.channel.id);
                 } else {
                     response.end("You are not authorized to view other users' gigs.  If you are trying to view your own gigs, " +
@@ -155,7 +155,7 @@ let ref = db.ref("slack");
                 };
                 webclient.chat.delete(deleteMessageRequest);
             } else if (button_val.substring(0, 11) === "confirm_gig") {
-                if (await userGigAuthed(request.body.user_id)) {
+                if (await userGigAuthed(jsonreq.user.id)) {
                     let gigUser = button_val.substring(12);
                     addUserGig(gigUser).then(async function() {
                         await webclient.chat.postMessage({
@@ -173,7 +173,7 @@ let ref = db.ref("slack");
                 };
                 webclient.chat.delete(deleteMessageRequest);
             } else if (button_val.substring(0, 13) === "confirm_reset")  {
-                if (await userGigAuthed(request.body.user_id)) {
+                if (await userGigAuthed(jsonreq.user.id)) {
                     let resetUser = button_val.substring(14);
                     backupUserGigs(resetUser).then(function() {
                         resetUserGigs(resetUser).then(async function() {
