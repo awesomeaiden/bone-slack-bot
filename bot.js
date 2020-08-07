@@ -295,7 +295,7 @@ let sendAllUserGigs = function(channel) {
     return new Promise(async function(resolve) {
         let userGigs = await getAllUserGigs();
         let blocks = [];
-        for (user in userGigs) {
+        for (let user in userGigs) {
             blocks.push({
                 "type": "section",
                 "text": {
@@ -336,7 +336,13 @@ let userGigAuthed = function(userid) {
         var reffunc = ref.child("gig_users").on("value", async function(snapshot) {
             let authed_users = snapshot.val();
             authed_users = authed_users.split(",");
-            if (authed_users.includes(userid)) {
+            let authed = false;
+            for (let i = 0; i < authed_users.length; i++) {
+                if (authed_users[i] === userid) {
+                    authed = true;
+                }
+            }
+            if (authed) {
                 resolve(true);
             } else {
                 resolve(false);
