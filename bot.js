@@ -150,13 +150,17 @@ let ref = db.ref("slack");
                 };
                 webclient.chat.delete(deleteMessageRequest);
             } else if (button_val.substring(0, 11) === "confirm_gig") {
-                let gigUser = button_val.substring(12);
-                addUserGig(gigUser).then(async function() {
-                    await webclient.chat.postMessage({
-                        text: "User gig has been logged",
-                        channel: jsonreq.channel.id
+                if (await userGigAuthed(request.body.user_id)) {
+                    let gigUser = button_val.substring(12);
+                    addUserGig(gigUser).then(async function() {
+                        await webclient.chat.postMessage({
+                            text: "User gig has been logged",
+                            channel: jsonreq.channel.id
+                        });
                     });
-                });
+                } else {
+                    response.end("You are not authorized to gig users.");
+                }
             } else if (button_val.substring(0, 12) === "cancel_reset") {
                 let deleteMessageRequest = {
                     channel: jsonreq.channel.id,
@@ -164,15 +168,19 @@ let ref = db.ref("slack");
                 };
                 webclient.chat.delete(deleteMessageRequest);
             } else if (button_val.substring(0, 13) === "confirm_reset")  {
-                let resetUser = button_val.substring(14);
-                backupUserGigs(resetUser).then(function() {
-                    resetUserGigs(resetUser).then(async function() {
-                        await webclient.chat.postMessage({
-                            text: "User gigs successfully reset",
-                            channel: jsonreq.channel.id
+                if (await userGigAuthed(request.body.user_id)) {
+                    let resetUser = button_val.substring(14);
+                    backupUserGigs(resetUser).then(function() {
+                        resetUserGigs(resetUser).then(async function() {
+                            await webclient.chat.postMessage({
+                                text: "User gigs successfully reset",
+                                channel: jsonreq.channel.id
+                            });
                         });
                     });
-                });
+                } else {
+                    response.end("You are not authorized to reset user gigs.");
+                }
             }
         }
         response.end();
