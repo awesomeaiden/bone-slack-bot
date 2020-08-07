@@ -135,7 +135,12 @@ let ref = db.ref("slack");
             let selectedUser = jsonreq.actions[0].selected_user;
             let userInfo = await getUserInfo(selectedUser);
             if (jsonreq.message.blocks[0].text.text === "Which user's gigs would you like to view?") {
-                sendUserGigs(selectedUser, userInfo.user.real_name, jsonreq.channel.id);
+                if (await userGigAuthed(request.body.user_id)) {
+                    sendUserGigs(selectedUser, userInfo.user.real_name, jsonreq.channel.id);
+                } else {
+                    response.end("You are not authorized to view other users' gigs.  If you are trying to view your own gigs, " +
+                        "simply type */gigs*");
+                }
             } else if (jsonreq.message.blocks[0].text.text === "Which user's gigs would you like to *reset*?") {
                 confirmUserReset(userInfo.user.real_name, selectedUser, jsonreq.channel.id);
             } else if (jsonreq.message.blocks[0].text.text === "Which user would you like to gig?") {
