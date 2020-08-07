@@ -34,13 +34,11 @@ let ref = db.ref("slack");
 
     app.post('/gigs', async function(request, response) {
         if (request.body.text === "") {
-            user_gigs = await getUserGigs(request.body.user_id);
-            webclient.chat.postMessage({
-                text: "_" + request.body.user_name + "_: You currently have *" + user_gigs.toString() + "* gigs",
-                channel: request.body.channel_id
-            });
+            let userInfo = await getUserInfo(request.body.user_id);
+            await sendUserGigs(userInfo.user.id, userInfo.user.real_name, request.body.channel_id);
+            response.end();
         } else if (request.body.text === "view") {
-            if (userGigAuthed(requst.body.user_id)) {
+            if (await userGigAuthed(request.body.user_id)) {
                 webclient.chat.postMessage({
                     "blocks": [
                         {
@@ -61,28 +59,121 @@ let ref = db.ref("slack");
                     ],
                     channel: request.body.channel_id
                 });
+                response.end();
             } else {
-                webclient.chat.postMessage({
-                    text: "You are not authorized to view other users' gigs.  If you are trying to view your own gigs, " +
-                        "simply type */gigs*",
-                    channel: request.body.channel_id
-                });
+                response.end("You are not authorized to view other users' gigs.  If you are trying to view your own gigs, " +
+                    "simply type */gigs*");
             }
         } else if (request.body.text === "all") {
-            if (userGigAuthed(requst.body.user_id)) {
-                // send message with summary of all gigs
+            if (await userGigAuthed(request.body.user_id)) {
+                response.end("Fetching all gigs...");
+                await sendAllUserGigs(request.body.channel_id);
             } else {
+                response.end("You are not authorized to view all gigs.  If you are trying to view your own gigs, " +
+                    "simply type */gigs*");
+            }
+        } else if (request.body.text === "reset") {
+            if (await userGigAuthed(request.body.user_id)) {
                 webclient.chat.postMessage({
-                    text: "You are not authorized to view all gigs.  If you are trying to view your own gigs, " +
-                        "simply type */gigs*",
+                    "blocks": [
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": "Which user's gigs would you like to *reset*?"
+                            },
+                            "accessory": {
+                                "type": "users_select",
+                                "placeholder": {
+                                    "type": "plain_text",
+                                    "text": "Select a user",
+                                    "emoji": true
+                                }
+                            }
+                        }
+                    ],
                     channel: request.body.channel_id
                 });
+                response.end();
+            } else {
+                response.end("You are not authorized to reset any gigs");
+            }
+        } else if (request.body.text === "add") {
+            if (await userGigAuthed(request.body.user_id)) {
+                webclient.chat.postMessage({
+                    "blocks": [
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": "Which user would you like to gig?"
+                            },
+                            "accessory": {
+                                "type": "users_select",
+                                "placeholder": {
+                                    "type": "plain_text",
+                                    "text": "Select a user",
+                                    "emoji": true
+                                }
+                            }
+                        }
+                    ],
+                    channel: request.body.channel_id
+                });
+                response.end();
+            } else {
+                response.end("You are not authorized to add any gigs");
             }
         } else {
-            webclient.chat.postMessage({
-                text: "Invalid command",
-                channel: request.body.channel_id
-            });
+            response.end("Invalid command!");
+        }
+    });
+
+    app.post('/interactive', async function(request, response) {
+        let jsonreq = JSON.parse(request.body.payload);
+        if (jsonreq.actions[0].type === "users_select") {
+            let selectedUser = jsonreq.actions[0].selected_user;
+            let userInfo = await getUserInfo(selectedUser);
+            if (jsonreq.message.blocks[0].text.text === "Which user's gigs would you like to view?") {
+                sendUserGigs(selectedUser, userInfo.user.real_name, jsonreq.channel.id);
+            } else if (jsonreq.message.blocks[0].text.text === "Which user's gigs would you like to *reset*?") {
+                confirmUserReset(userInfo.user.real_name, selectedUser, jsonreq.channel.id);
+            } else if (jsonreq.message.blocks[0].text.text === "Which user would you like to gig?") {
+                confirmAddUserGig(userInfo.user.real_name, selectedUser, jsonreq.channel.id);
+            }
+        } else if (jsonreq.actions[0].type === "button") {
+            let button_val = jsonreq.actions[0].value;
+            if (button_val.substring(0, 10) === "cancel_gig") {
+                let deleteMessageRequest = {
+                    channel: jsonreq.channel.id,
+                    ts: jsonreq.message.ts
+                };
+                webclient.chat.delete(deleteMessageRequest);
+            } else if (button_val.substring(0, 11) === "confirm_gig") {
+                let gigUser = button_val.substring(12);
+                addUserGig(gigUser).then(async function() {
+                    await webclient.chat.postMessage({
+                        text: "User gig has been logged",
+                        channel: jsonreq.channel.id
+                    });
+                });
+            } else if (button_val.substring(0, 12) === "cancel_reset") {
+                let deleteMessageRequest = {
+                    channel: jsonreq.channel.id,
+                    ts: jsonreq.message.ts
+                };
+                webclient.chat.delete(deleteMessageRequest);
+            } else if (button_val.substring(0, 13) === "confirm_reset")  {
+                let resetUser = button_val.substring(14);
+                backupUserGigs(resetUser).then(function() {
+                    resetUserGigs(resetUser).then(async function() {
+                        await webclient.chat.postMessage({
+                            text: "User gigs successfully reset",
+                            channel: jsonreq.channel.id
+                        });
+                    });
+                });
+            }
         }
         response.end();
     });
@@ -92,9 +183,157 @@ let ref = db.ref("slack");
     });
 })();
 
+let addUserGig = function(userid) {
+    return new Promise(async function(resolve) {
+        ref.child("gigs").child(userid).child("gigs").set(
+            await getUserGigs((userid)) + 1
+        ).then(resolve());
+    });
+}
+
+let confirmAddUserGig = function(name, userid, channel) {
+    return new Promise(async function(resolve) {
+        await webclient.chat.postMessage({
+            blocks: [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Are you sure you want to give *" + name + "* a gig?"
+                    }
+                },
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "style": "primary",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Gig",
+                                "emoji": true
+                            },
+                            "value": "confirm_gig_" + userid
+                        },
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Cancel",
+                                "emoji": true
+                            },
+                            "value": "cancel_gig"
+                        }
+                    ]
+                }],
+            channel: channel
+        });
+        resolve();
+    });
+}
+
+let resetUserGigs = function(userid) {
+    return new Promise(function(resolve) {
+        ref.child("gigs").child(userid).child("gigs").set(0).then(resolve());
+    })
+}
+
+let confirmUserReset = function(name, userid, channel) {
+    return new Promise(async function(resolve) {
+        await webclient.chat.postMessage({
+            blocks: [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Are you sure you want to reset *" + name + "*'s gigs?"
+                    }
+                },
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "style": "primary",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Reset",
+                                "emoji": true
+                            },
+                            "value": "confirm_reset_" + userid
+                        },
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Cancel",
+                                "emoji": true
+                            },
+                            "value": "cancel_reset"
+                        }
+                    ]
+                }],
+            channel: channel
+        });
+        resolve();
+    });
+};
+
+let getAllUserGigs = function() {
+    return new Promise(function(resolve) {
+        var allChange = ref.child("gigs").on("value", async function(snapshot) {
+            let userGigsObj = snapshot.val();
+            let userGigs = Object.keys(userGigsObj).map((key) => userGigsObj[key]);
+            userGigs.sort(nameCompare);
+            resolve(userGigs);
+        });
+        ref.off("value", allChange);
+    });
+};
+
+let sendAllUserGigs = function(channel) {
+    return new Promise(async function(resolve) {
+        let userGigs = await getAllUserGigs();
+        let blocks = [];
+        for (user in userGigs) {
+            blocks.push({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "_" + userGigs[user].name + "_: *" + userGigs[user].gigs.toString() + "* gigs"
+                }
+            });
+        }
+        await webclient.chat.postMessage({
+            blocks: blocks,
+            channel: channel
+        });
+        resolve();
+    });
+};
+
+let nameCompare = function(a, b) {
+    if (a.name < b.name) {
+        return -1;
+    }
+    if (a.name > b.name) {
+        return 1;
+    }
+    return 0;
+};
+
+let getUserInfo = function(userid) {
+    return new Promise(async function(resolve) {
+        let info = await webclient.users.info({
+            user: userid
+        });
+        resolve(info);
+    });
+};
+
 let userGigAuthed = function(userid) {
     return new Promise(function(resolve) {
-        ref.child("gigs").child("gig_users").on("value", function(snapshot) {
+        var reffunc = ref.child("gig_users").on("value", async function(snapshot) {
             let authed_users = snapshot.val();
             if (authed_users.includes(userid)) {
                 resolve(true);
@@ -102,34 +341,70 @@ let userGigAuthed = function(userid) {
                 resolve(false);
             }
         });
+        ref.off("value", reffunc);
+    });
+};
+
+let sendUserGigs = function(userid, username, channelid) {
+    return new Promise(async function(resolve) {
+        let user_gigs = await getUserGigs(userid);
+        await webclient.chat.postMessage({
+            text: "_" + username + "_: You currently have *" + user_gigs.toString() + "* gigs",
+            channel: channelid
+        });
+        resolve();
     });
 };
 
 let getUserGigs = function(userid) {
     return new Promise(function(resolve){
-        ref.child("gigs").child(userid).on("value", function(snapshot) {
+        var reffunc = ref.child("gigs").child(userid).on("value", function(snapshot) {
             resolve(snapshot.val().gigs);
         });
+        ref.off("value", reffunc);
     });
+};
+
+let getDateTimeStamp = function() {
+    let timestampdate = new Date(Date.now());
+    let timestamp = timestampdate.toDateString() + " " + timestampdate.toLocaleTimeString('en-US');
+    return timestamp;
 }
+
+let backupUserGigs = function(userid) {
+    return new Promise(function(resolve, reject) {
+        var reffunc = ref.child("gigs").child(userid).on("value", function(snapshot) {
+            let gigs = snapshot.val();
+            let timestamp = getDateTimeStamp();
+            let backup = {};
+            backup[userid] = gigs;
+            ref.child("backup_gigs").child(timestamp).set(backup).then(
+                resolve(userid + " gigs backed up")
+            ).catch(
+                reject(userid + " gigs NOT backed up!")
+            );
+        });
+        ref.off("value", reffunc);
+    });
+};
 
 let backupGigs = function() {
     return new Promise(function(resolve, reject) {
-        ref.child("gigs").on("value", function(snapshot) {
+        var reffunc = ref.child("gigs").on("value", function(snapshot) {
             let gigs = snapshot.val();
-            let timestampdate = new Date(Date.now());
-            let timestamp = timestampdate.toDateString() + " " + timestampdate.getTime();
+            let timestamp = getDateTimeStamp();
             ref.child("backup_gigs").child(timestamp).set(gigs).then(
                 resolve("Gigs backed up")
             ).catch(
                 reject("Gig back up FAILED")
             );
         });
+        ref.off("value", reffunc);
     });
 };
 
 let resetAllGigs = function() {
-    return new Promise(function(resolve, reject) {
+    return new Promise(async function(resolve, reject) {
         // First, backup gigs
         backupGigs().then(async function() {
             let users = await webclient.users.list({
@@ -139,7 +414,7 @@ let resetAllGigs = function() {
 
             let resetGigs = {}
             for (let i = 0; i < users.length; i++) {
-                if (users[i].id !== "USLACKBOT" && users[i].id !== "U017P4RFT60" && users[i].id !== "U017FHBTK7X"
+                if (users[i].id !== "USLACKBOT" && users[i].id !== "U017P4RFT60" && users[i].id !== "U0189C4PW2C"
                     && users[i].id !== "U017P462Z60") {
                     resetGigs[users[i].id] = {
                         "name": users[i].real_name,
