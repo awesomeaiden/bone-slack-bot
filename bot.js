@@ -335,6 +335,7 @@ let userGigAuthed = function(userid) {
     return new Promise(function(resolve) {
         var reffunc = ref.child("gig_users").on("value", async function(snapshot) {
             let authed_users = snapshot.val();
+            authed_users = authed_users.split(",");
             if (authed_users.includes(userid)) {
                 resolve(true);
             } else {
