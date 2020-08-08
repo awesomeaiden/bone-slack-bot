@@ -62,7 +62,7 @@ let ref = db.ref("slack");
                 response.end();
             } else {
                 response.end("You are not authorized to view other users' gigs.  If you are trying to view your own gigs, " +
-                    "simply type */gigs*");
+                  "simply type */gigs*");
             }
         } else if (request.body.text === "all") {
             if (await userGigAuthed(request.body.user_id)) {
@@ -70,7 +70,7 @@ let ref = db.ref("slack");
                 await sendAllUserGigs(request.body.channel_id);
             } else {
                 response.end("You are not authorized to view all gigs.  If you are trying to view your own gigs, " +
-                    "simply type */gigs*");
+                  "simply type */gigs*");
             }
         } else if (request.body.text === "reset") {
             if (await userGigAuthed(request.body.user_id)) {
@@ -93,6 +93,48 @@ let ref = db.ref("slack");
                         }
                     ],
                     channel: request.body.channel_id
+                });
+                response.end();
+            } else {
+                response.end("You are not authorized to reset any gigs");
+            }
+        } else if (request.body.text === "reset_all_9974") {
+            if (await userGigAuthed(request.body.user_id)) {
+                await webclient.chat.postMessage({
+                    blocks: [
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": "Are you sure you want to reset ALL gigs??  This cannot easily be undone!"
+                            }
+                        },
+                        {
+                            "type": "actions",
+                            "elements": [
+                                {
+                                    "type": "button",
+                                    "style": "danger",
+                                    "text": {
+                                        "type": "plain_text",
+                                        "text": "RESET ALL",
+                                        "emoji": true
+                                    },
+                                    "value": "all_reset_confirm"
+                                },
+                                {
+                                    "type": "button",
+                                    "style": "primary",
+                                    "text": {
+                                        "type": "plain_text",
+                                        "text": "Cancel",
+                                        "emoji": true
+                                    },
+                                    "value": "cancel_all_reset"
+                                }
+                            ]
+                        }],
+                    channel: channel
                 });
                 response.end();
             } else {
@@ -139,7 +181,7 @@ let ref = db.ref("slack");
                     sendUserGigs(selectedUser, userInfo.user.real_name, jsonreq.channel.id);
                 } else {
                     response.end("You are not authorized to view other users' gigs.  If you are trying to view your own gigs, " +
-                        "simply type */gigs*");
+                      "simply type */gigs*");
                 }
             } else if (jsonreq.message.blocks[0].text.text === "Which user's gigs would you like to *reset*?") {
                 confirmUserReset(userInfo.user.real_name, selectedUser, jsonreq.channel.id);
@@ -186,6 +228,17 @@ let ref = db.ref("slack");
                 } else {
                     response.end("You are not authorized to reset user gigs.");
                 }
+            } else if (button_val.substring(0, 13) === "all_reset_confirm")  {
+                if (await userGigAuthed(jsonreq.user.id)) {
+                    resetAllGigs().then(async function() {
+                        await webclient.chat.postMessage({
+                            text: "ALL gigs successfully reset",
+                            channel: jsonreq.channel.id
+                        });
+                    });
+                } else {
+                    response.end("You are not authorized to reset user gigs.");
+                }
             }
         }
         response.end();
@@ -199,10 +252,10 @@ let ref = db.ref("slack");
 let addUserGig = function(userid) {
     return new Promise(async function(resolve) {
         ref.child("gigs").child(userid).child("gigs").set(
-            await getUserGigs((userid)) + 1
+          await getUserGigs((userid)) + 1
         ).then(resolve());
     });
-}
+};
 
 let confirmAddUserGig = function(name, userid, channel) {
     return new Promise(async function(resolve) {
@@ -243,13 +296,13 @@ let confirmAddUserGig = function(name, userid, channel) {
         });
         resolve();
     });
-}
+};
 
 let resetUserGigs = function(userid) {
     return new Promise(function(resolve) {
         ref.child("gigs").child(userid).child("gigs").set(0).then(resolve());
     })
-}
+};
 
 let confirmUserReset = function(name, userid, channel) {
     return new Promise(async function(resolve) {
@@ -389,7 +442,7 @@ let getDateTimeStamp = function() {
     let timestampdate = new Date(Date.now());
     let timestamp = timestampdate.toDateString() + " " + timestampdate.toLocaleTimeString('en-US');
     return timestamp;
-}
+};
 
 let backupUserGigs = function(userid) {
     return new Promise(function(resolve, reject) {
@@ -399,9 +452,9 @@ let backupUserGigs = function(userid) {
             let backup = {};
             backup[userid] = gigs;
             ref.child("backup_gigs").child(timestamp).set(backup).then(
-                resolve(userid + " gigs backed up")
+              resolve(userid + " gigs backed up")
             ).catch(
-                reject(userid + " gigs NOT backed up!")
+              reject(userid + " gigs NOT backed up!")
             );
         });
         ref.off("value", reffunc);
@@ -414,9 +467,9 @@ let backupGigs = function() {
             let gigs = snapshot.val();
             let timestamp = getDateTimeStamp();
             ref.child("backup_gigs").child(timestamp).set(gigs).then(
-                resolve("Gigs backed up")
+              resolve("Gigs backed up")
             ).catch(
-                reject("Gig back up FAILED")
+              reject("Gig back up FAILED")
             );
         });
         ref.off("value", reffunc);
@@ -432,10 +485,12 @@ let resetAllGigs = function() {
             });
             users = users.members;
 
-            let resetGigs = {}
+            let resetGigs = {};
             for (let i = 0; i < users.length; i++) {
+                // Slackbot, Admin, Bonez Bot, Zoom, GitHub, Simple Poll, Google Drive
                 if (users[i].id !== "USLACKBOT" && users[i].id !== "U017P4RFT60" && users[i].id !== "U0189C4PW2C"
-                    && users[i].id !== "U017P462Z60") {
+                  && users[i].id !== "U017P462Z60" && users[i].id !== "U017FHBTK7X" && users[i].id !== "U017H4TCGMR"
+                  && users[i].id !== "U01818SL7R8") {
                     resetGigs[users[i].id] = {
                         "name": users[i].real_name,
                         "gigs": 0
@@ -444,7 +499,7 @@ let resetAllGigs = function() {
             }
 
             await ref.child("gigs").set(resetGigs).then(
-                resolve("All gigs reset")
+              resolve("All gigs reset")
             ).catch(reject("Could not reset gigs"));
         });
     });
