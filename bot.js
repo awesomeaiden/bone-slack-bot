@@ -130,7 +130,7 @@ let ref = db.ref("slack");
                                         "text": "Cancel",
                                         "emoji": true
                                     },
-                                    "value": "cancel_all_reset"
+                                    "value": "cancel_reset"
                                 }
                             ]
                         }],
@@ -228,7 +228,7 @@ let ref = db.ref("slack");
                 } else {
                     response.end("You are not authorized to reset user gigs.");
                 }
-            } else if (button_val.substring(0, 13) === "all_reset_confirm")  {
+            } else if (button_val.substring(0, 17) === "all_reset_confirm")  {
                 if (await userGigAuthed(jsonreq.user.id)) {
                     resetAllGigs().then(async function() {
                         await webclient.chat.postMessage({
