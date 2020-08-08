@@ -134,7 +134,7 @@ let ref = db.ref("slack");
                                 }
                             ]
                         }],
-                    channel: channel
+                    channel: request.body.channel_id
                 });
                 response.end();
             } else {
